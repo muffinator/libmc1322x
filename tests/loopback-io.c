@@ -135,7 +135,7 @@ void main(void) {
 		printf("	1: %d %d %d %d %d %d %d %d 2: %d %d %d %d %d %d %d %d %d %d 3: %d %d \n", readg(VREF1L), readg(ADC1), readg(ADC3), readg(ADC5), readg(U2RTS), readg(U2RX), readg(U1CTS), readg(SCL), readg(TMR3), readg(TMR1), readg(SCK), readg(MISO), readg(BTCK), readg(SSIRX), readg(KBI7), readg(KBI2), readg(ANT1), readg(RXON), readg(VREF2H), readg(TDO));
 		okay1 = (readg(VREF1L)&&readg(ADC1)&&readg(ADC3)&&readg(ADC5)&&readg(U2RTS)&&readg(U2RX)&&readg(U1CTS)&&readg(SCL));
 		okay2 = (readg(TMR3)&&readg(TMR1)&&readg(SCK)&&readg(MISO)&&readg(BTCK)&&readg(SSIRX)&&readg(KBI7)&&readg(KBI2)&&readg(ANT1)&&readg(RXON));
-		okay3=(readg(VREF2H)&&readg(TDI));
+		okay3=(readg(TDI));
 		if ((count1!=2)&&(okay1==1)) count1=1;
 		if ((okay2==1)&&(count2!=2)) count2=1;
 		if ((okay3==1)&&(count3!=3)) count3=1;
@@ -164,7 +164,7 @@ void main(void) {
 		gpio_reset(EVTI);
 		okay1 = (readg(VREF1L)||readg(ADC1)||readg(ADC3)||readg(ADC5)||readg(U2RTS)||readg(U2RX)||readg(U1CTS)||readg(SCL));
 		okay2 = (readg(TMR3)||readg(TMR1)||readg(SCK)||readg(MISO)||readg(BTCK)||readg(SSIRX)||readg(KBI7)||readg(KBI2)||readg(ANT1)||readg(RXON));
-		okay3=(readg(VREF2H)||readg(TDI));
+		okay3=(readg(TDI));
 		if ((okay1==0)&&(count1==1)) count1=2;
 		if ((okay2==0)&&(count2==1)) count2=2;
 		if ((okay3==0)&&(count3==1)) count3=2;
