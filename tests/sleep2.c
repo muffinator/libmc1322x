@@ -4,7 +4,7 @@
 #include "tests.h"
 #include "config.h"
 
-#define debug 1
+#define debug 0
 
 volatile char rupt = 0;
 volatile char s = 0;
@@ -107,7 +107,7 @@ void main(void)
 	#endif
 
 	#define DELAY 10
-	volatile uint32_t i;
+//	volatile uint32_t i;
 	s=1;
 	while(1)
 	{
@@ -123,15 +123,15 @@ void main(void)
 			#if debug
 			putstr("going to sleep again\n");
 			#endif
-			for(i=0; i<DELAY; i++) { continue; }
+//			for(i=0; i<DELAY; i++) { continue; }
 			
-			ADC->COMP_1 = 0x13ff; //waiting for vbat to go above level
+			ADC->COMP_1 = 0x1827; //waiting for vbat to go above level
 
 			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
-			CRM->WU_CNTLbits.RTC_WU_EN = 1;
-			CRM->WU_CNTLbits.AUTO_ADC = 1;
+			CRM->WU_CNTLbits.RTC_WU_EN = 0;
+			CRM->WU_CNTLbits.AUTO_ADC = 0;
 			CRM->RTC_TIMEOUT = 1000;
-			CRM->WU_TIMEOUT = 1000000;
+			CRM->WU_TIMEOUT = 10000;
 			
 			maca_off();
 
@@ -153,7 +153,7 @@ void main(void)
 	GPIO->PAD_KEEP.ADC1 = 0;
 	GPIO->PAD_PU_EN.ADC1 = 0;
 
-			ADC->COMP_1 = 0x91ff; //waiting for vbat to drop now
+			ADC->COMP_1 = 0x9513; //waiting for vbat to drop now
 			s=0;	//no sleep 'till brooklyn! (adc interrupt)
 /*			maca_on();
 			check_maca();
