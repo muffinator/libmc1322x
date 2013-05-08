@@ -26,20 +26,49 @@ void adc_isr(void)
 		if((ADC->COMP_1&0x8000)==0x8000)
 		{
 			s = 1;
-			ADC->COMP_1 = 0x13ff;
-		}else{
-			s = 0;
-			ADC->COMP_1 = 0x91ff;
 		}
 	}
 
 	ADC->IRQ = 0xf000;
 }
 
+#define PAYLOAD_LEN 1
 
+void fill_packet(volatile packet_t *p) {
+    static volatile uint8_t count=0;
+    volatile uint8_t i;
+    p->length = PAYLOAD_LEN;
+    p->offset = 0;
+    for(i=0; i<PAYLOAD_LEN; i++) {
+        p->data[i] = count++;
+    }
+
+    /* acks get treated differently, even in promiscuous mode */
+    /* setting the third bit makes sure that we never send an ack */
+        /* or any valid 802.15.4-2006 packet */
+    p->data[0] |= (1 << 3);
+}
+
+uint32_t x;
 void main(void)
 {
+//	volatile packet_t *p;
 	board_init();
+/*	trim_xtal();
+	vreg_init();
+
+	GPIO->FUNC_SEL.ANT2 = 3;
+	GPIO->PAD_DIR_SET.ANT2=1;
+	gpio_set(ANT2);
+	for(x=0;x<400000;x++){continue;}
+	gpio_reset(ANT2);
+	for(x=0;x<400000;x++){continue;}
+	gpio_set(ANT2);
+	maca_init();
+	gpio_reset(ANT2);
+	set_channel(0);
+	set_power(0x0f);
+*/
 #if debug
 	uart_init(UART1, 115200);
 #endif
@@ -77,32 +106,32 @@ void main(void)
 	}
 	#endif
 
-	#define DELAY 1000000
-//	GPIO->FUNC_SEL.TXON = 3;
-//	GPIO->PAD_DIR_SET.TXON=1;
+	#define DELAY 10
 	volatile uint32_t i;
 	s=1;
 	while(1)
 	{
 		#if debug
 		putstr("woke up \n");
-		for(i=0; i<DELAY; i++) { continue; }
+//		for(i=0; i<DELAY; i++) { continue; }
 		#endif
 		if(s==1)
 		{
-  //  		while((CRM->RTC_COUNT - last_rtc) <= 2) {
-    //    		CRM->STATUS = ~0; //clear events
-	//		}
+//  		while((CRM->RTC_COUNT - last_rtc) <= 2) {
+//    		CRM->STATUS = ~0; //clear events
+//		}
 			#if debug
 			putstr("going to sleep again\n");
 			#endif
 			for(i=0; i<DELAY; i++) { continue; }
 			
-			CRM->WU_CNTLbits.TIMER_WU_EN = 0;
+			ADC->COMP_1 = 0x13ff; //waiting for vbat to go above level
+
+			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
 			CRM->WU_CNTLbits.RTC_WU_EN = 1;
 			CRM->WU_CNTLbits.AUTO_ADC = 1;
 			CRM->RTC_TIMEOUT = 1000;
-			CRM->WU_TIMEOUT = 0;
+			CRM->WU_TIMEOUT = 1000000;
 			
 			maca_off();
 
@@ -118,6 +147,26 @@ void main(void)
 			*CRM_STATUS = 1; 
 			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
 			CRM->WU_CNTLbits.RTC_WU_EN = 0;
+			
+	GPIO->FUNC_SEL.ADC1 = 1;
+	GPIO->PAD_DIR.ADC1 = 0;
+	GPIO->PAD_KEEP.ADC1 = 0;
+	GPIO->PAD_PU_EN.ADC1 = 0;
+
+			ADC->COMP_1 = 0x91ff; //waiting for vbat to drop now
+			s=0;	//no sleep 'till brooklyn! (adc interrupt)
+/*			maca_on();
+			check_maca();
+			while((p = rx_packet())) {
+				if(p) free_packet(p);
+			}
+
+        	p = get_free_packet();
+        	if(p) {
+            	fill_packet(p);
+            	tx_packet(p);
+			}
+*/
 //			last_rtc = CRM->RTC_COUNT;
 		}
 //		gpio_set(TXON);	
