@@ -1,8 +1,10 @@
 #include <mc1322x.h>
 #include <board.h>
+#include <stdio.h>
 
 #include "tests.h"
 #include "config.h"
+#include "sleep2.h"
 
 #define debug 0
 
@@ -25,14 +27,42 @@ void adc_isr(void)
 		rupt = ((trig&0x0002)==0x0002);
 		if((ADC->COMP_1&0x8000)==0x8000)
 		{
-			s = 1;
+			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
+			CRM->WU_CNTLbits.RTC_WU_EN = 0;
+			CRM->WU_CNTLbits.AUTO_ADC = 0;
+			CRM->RTC_TIMEOUT = 1000;
+			CRM->WU_TIMEOUT = 20000;
+			
+			maca_off();
+
+			CRM->SLEEP_CNTLbits.DOZE = 0;
+			CRM->SLEEP_CNTLbits.RAM_RET = 3;
+			CRM->SLEEP_CNTLbits.MCU_RET = 1;
+			CRM->SLEEP_CNTLbits.DIG_PAD_EN = 1;
+			CRM->SLEEP_CNTLbits.HIB = 1;
+			while((*CRM_STATUS & 0x1) == 0) { continue; }
+			*CRM_STATUS = 1; 
+			/* asleep */
+			while((*CRM_STATUS & 0x1) == 0) { continue; }
+			*CRM_STATUS = 1; 
+			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
+			CRM->WU_CNTLbits.RTC_WU_EN = 0;
+
+			CRM->VREG_CNTLbits.VREG_1P8V_EN = 1; 
+			CRM->VREG_CNTLbits.VREG_1P5V_EN = 3;
+			while(CRM->STATUSbits.VREG_1P8V_RDY == 0) { continue; }
+			while(CRM->STATUSbits.VREG_1P5V_RDY == 0) { continue; }
+			maca_on();
+			set_adc(ADC1);
+
+			ADC->COMP_1 = 0x9513; //waiting for vbat to drop now
 		}
 	}
 
 	ADC->IRQ = 0xf000;
 }
 
-#define PAYLOAD_LEN 1
+#define PAYLOAD_LEN 125
 
 void fill_packet(volatile packet_t *p) {
     static volatile uint8_t count=0;
@@ -54,126 +84,49 @@ void main(void)
 {
 //	volatile packet_t *p;
 	board_init();
-/*	trim_xtal();
-	vreg_init();
 
-	GPIO->FUNC_SEL.ANT2 = 3;
-	GPIO->PAD_DIR_SET.ANT2=1;
-	gpio_set(ANT2);
-	for(x=0;x<400000;x++){continue;}
-	gpio_reset(ANT2);
-	for(x=0;x<400000;x++){continue;}
-	gpio_set(ANT2);
-	maca_init();
-	gpio_reset(ANT2);
-	set_channel(0);
-	set_power(0x0f);
-*/
 #if debug
 	uart_init(UART1, 115200);
 #endif
-
-	GPIO->FUNC_SEL.ADC1 = 1;
-	GPIO->PAD_DIR.ADC1 = 0;
-	GPIO->PAD_KEEP.ADC1 = 0;
-	GPIO->PAD_PU_EN.ADC1 = 0;
+	set_adc(ADC1);
 
 	adc_init();
-	ADC->COMP_1=	0x13ff;	//use channel 3, compare on 0ff
-	ADC->SEQ_1 =	0x2;	//only channel 3 is enabled
+	ADC->COMP_1 = 0x9513; //waiting for vbat to drop now
+	ADC->SEQ_1 =	0x0002;	//only channel 1 is enabled
+//	ADC->SEQ_2 =	0x8001;	//channel 0 is enabled, use timer to sequence them bits
 	ADC->CONTROL &= ~0xe000;
 	enable_irq(ADC);	
+	s=0;
 
+	trim_xtal();
+	vreg_init();
 
-	#if USE_32KHZ
-		/* turn on the 32kHz crystal */
-//	putstr("enabling 32kHz crystal\n\r");
-	clear_bit(*CRM_RINGOSC_CNTL,0);
-	set_bit(*CRM_XTAL32_CNTL,0);
-	set_bit(*CRM_SYS_CNTL,5);
-	{
-		static volatile uint32_t old;
-		old = *CRM_RTC_COUNT;
-		putstr("waiting for xtal\n\r");
-		while(*CRM_RTC_COUNT == old) { 
-			continue; 
-		}
-		/* RTC has started up */
-
-		set_bit(*CRM_SYS_CNTL,5);
-//		putstr("32kHZ xtal started\n\r");
-
-	}
-	#endif
-
-	#define DELAY 10
-//	volatile uint32_t i;
-	s=1;
+	maca_init();
+	set_channel(0);
+	set_power(0x12);
+	#define DELAY 10000
+	volatile uint32_t i;
+	volatile packet_t *p;
+	set_out(KBI5);
 	while(1)
 	{
 		#if debug
 		putstr("woke up \n");
 //		for(i=0; i<DELAY; i++) { continue; }
 		#endif
-		if(s==1)
-		{
-//  		while((CRM->RTC_COUNT - last_rtc) <= 2) {
-//    		CRM->STATUS = ~0; //clear events
-//		}
-			#if debug
-			putstr("going to sleep again\n");
-			#endif
-//			for(i=0; i<DELAY; i++) { continue; }
-			
-			ADC->COMP_1 = 0x1827; //waiting for vbat to go above level
-
-			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
-			CRM->WU_CNTLbits.RTC_WU_EN = 0;
-			CRM->WU_CNTLbits.AUTO_ADC = 0;
-			CRM->RTC_TIMEOUT = 1000;
-			CRM->WU_TIMEOUT = 10000;
-			
-			maca_off();
-
-			CRM->SLEEP_CNTLbits.DOZE = 0;
-			CRM->SLEEP_CNTLbits.RAM_RET = 3;
-			CRM->SLEEP_CNTLbits.MCU_RET = 1;
-			CRM->SLEEP_CNTLbits.DIG_PAD_EN = 1;
-			CRM->SLEEP_CNTLbits.HIB = 1;
-			while((*CRM_STATUS & 0x1) == 0) { continue; }
-			*CRM_STATUS = 1; 
-			/* asleep */
-			while((*CRM_STATUS & 0x1) == 0) { continue; }
-			*CRM_STATUS = 1; 
-			CRM->WU_CNTLbits.TIMER_WU_EN = 1;
-			CRM->WU_CNTLbits.RTC_WU_EN = 0;
-			
-	GPIO->FUNC_SEL.ADC1 = 1;
-	GPIO->PAD_DIR.ADC1 = 0;
-	GPIO->PAD_KEEP.ADC1 = 0;
-	GPIO->PAD_PU_EN.ADC1 = 0;
-
-			ADC->COMP_1 = 0x9513; //waiting for vbat to drop now
-			s=0;	//no sleep 'till brooklyn! (adc interrupt)
-/*			maca_on();
-			check_maca();
-			while((p = rx_packet())) {
-				if(p) free_packet(p);
-			}
-
-        	p = get_free_packet();
-        	if(p) {
-            	fill_packet(p);
-            	tx_packet(p);
-			}
-*/
-//			last_rtc = CRM->RTC_COUNT;
+		gpio_reset(KBI5);
+		for(i=0; i<DELAY; i++) { continue; }
+		gpio_set(KBI5);
+		for(i=0; i<DELAY; i++) { continue; }
+		check_maca();
+		while((p=rx_packet())) {
+			if(p) free_packet(p);
 		}
-//		gpio_set(TXON);	
-		//putstr("woke up!");
-//		for(i=0; i<DELAY; i++) { continue; }
-//		gpio_reset(TXON);
-
+		p = get_free_packet();
+		if(p) {
+			fill_packet(p);
+			tx_packet(p);
+		}	
 		if(rupt==1)
 		{
 			#if debug
