@@ -1,6 +1,7 @@
 #include <mc1322x.h>
 #include <board.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "tests.h"
 #include "config.h"
@@ -10,6 +11,9 @@
 
 volatile char rupt = 0;
 volatile char s = 0;
+volatile uint16_t data[256];
+volatile uint8_t idx = 0;
+volatile uint8_t xmit = 0;
 uint32_t last_rtc;
 
 
@@ -31,7 +35,7 @@ void adc_isr(void)
 			CRM->WU_CNTLbits.RTC_WU_EN = 0;
 			CRM->WU_CNTLbits.AUTO_ADC = 0;
 			CRM->RTC_TIMEOUT = 1000;
-			CRM->WU_TIMEOUT = 20000;
+			CRM->WU_TIMEOUT = 60000;
 			
 			maca_off();
 
@@ -54,24 +58,75 @@ void adc_isr(void)
 			while(CRM->STATUSbits.VREG_1P5V_RDY == 0) { continue; }
 			maca_on();
 			set_adc(ADC1);
-
+			set_adc(ADC0);
+			set_adc(ADC3);
+			idx=0;
+			xmit=0;
+			memset((uint16_t *)data,0,256);
 			ADC->COMP_1 = 0x9513; //waiting for vbat to drop now
 		}
+	ADC->IRQ = 0x1000;
 	}
-
-	ADC->IRQ = 0xf000;
+	if(((ADC->IRQ)&0x4000) == 0x4000)
+	{
+/*		data[index] = ADC->FIFO_READ;
+		index++;
+		if(index==2)
+		{
+			index=0;
+			xmit = 1;
+		}
+*/		ADC->IRQ = 0x4000;
+	}
+	if(((ADC->IRQ)&0x2000) == 0x2000)
+	{
+/*		data[index] = ADC->FIFO_READ;
+		index++;
+		if(index==2)
+		{
+			index=0;
+			xmit = 1;
+		}
+*/		ADC->IRQ = 0x2000;
+	}
+	if(((ADC->IRQ)&0x8000) == 0x8000)
+	{
+		uint16_t temp = ADC->FIFO_READ;
+		if((temp&0xf000)==0x3000)
+		{	
+			if(idx<=125)
+			{
+				gpio_reset(KBI5);
+				data[idx] = temp;
+				idx++;
+				gpio_set(KBI7);
+			}else{
+				if(xmit!=2)
+				{
+					xmit = 1;
+				}
+			}
+			gpio_set(KBI5);
+		}
+		ADC->IRQ = 0x8000;
+	}
 }
 
 #define PAYLOAD_LEN 125
 
 void fill_packet(volatile packet_t *p) {
-    static volatile uint8_t count=0;
     volatile uint8_t i;
     p->length = PAYLOAD_LEN;
     p->offset = 0;
     for(i=0; i<PAYLOAD_LEN; i++) {
-        p->data[i] = count++;
+        p->data[i] = data[i]>>8;
+#if debug
+		putstr("%d " data[count]);
+#endif
     }
+#if debug
+	putstr("\n");
+#endif
 
     /* acks get treated differently, even in promiscuous mode */
     /* setting the third bit makes sure that we never send an ack */
@@ -89,12 +144,14 @@ void main(void)
 	uart_init(UART1, 115200);
 #endif
 	set_adc(ADC1);
+	set_adc(ADC0);
+	set_adc(ADC3);
 
 	adc_init();
 	ADC->COMP_1 = 0x9513; //waiting for vbat to drop now
-	ADC->SEQ_1 =	0x0002;	//only channel 1 is enabled
-//	ADC->SEQ_2 =	0x8001;	//channel 0 is enabled, use timer to sequence them bits
-	ADC->CONTROL &= ~0xe000;
+	ADC->SEQ_1 =	0x000a;	//only channel 1 is enabled
+	ADC->CONTROL |= 0xf001;
+	ADC->FIFO_CONTROL = 0x7;
 	enable_irq(ADC);	
 	s=0;
 
@@ -105,28 +162,38 @@ void main(void)
 	set_channel(0);
 	set_power(0x12);
 	#define DELAY 10000
-	volatile uint32_t i;
+	//volatile uint32_t i;
 	volatile packet_t *p;
+	set_out(KBI3);
+	set_out(KBI7);
 	set_out(KBI5);
+	memset((uint16_t *)(data),0,256);
+	idx=0;
+	xmit=0;
 	while(1)
 	{
 		#if debug
 		putstr("woke up \n");
 //		for(i=0; i<DELAY; i++) { continue; }
 		#endif
-		gpio_reset(KBI5);
-		for(i=0; i<DELAY; i++) { continue; }
-		gpio_set(KBI5);
-		for(i=0; i<DELAY; i++) { continue; }
-		check_maca();
-		while((p=rx_packet())) {
-			if(p) free_packet(p);
+		if(xmit==1)
+		{
+		gpio_reset(KBI3);
+//		for(i=0; i<DELAY; i++) { continue; }
+//		for(i=0; i<DELAY; i++) { continue; }
+			check_maca();
+			while((p=rx_packet())) {
+				if(p) free_packet(p);
+			}
+			p = get_free_packet();
+			if(p) {
+				fill_packet(p);
+				tx_packet(p);
+			}	
+			xmit=2;
+		gpio_set(KBI3);
+		gpio_reset(KBI7);
 		}
-		p = get_free_packet();
-		if(p) {
-			fill_packet(p);
-			tx_packet(p);
-		}	
 		if(rupt==1)
 		{
 			#if debug
