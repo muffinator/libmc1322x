@@ -3,14 +3,14 @@ MC1322X := ..
 # all off the common objects for each target
 # a COBJ is made for EACH board and goes the obj_$(BOARD)_board directory
 # board specific code is OK in these files
-COBJS := tests.o put.o
+COBJS := tests.o put.o stuffing.o 
 
 # all of the target programs to build
 TARGETS := blink-red blink-green blink-blue blink-white blink-allio \
            uart1-loopback \
            u1u2-loopback \
            tmr tmr-ints \
-           sleep \
+           sleep cycle-sleep\
            printf \
 	   asm \
 	   adc \
@@ -22,7 +22,7 @@ TARGETS := blink-red blink-green blink-blue blink-white blink-allio \
 # these targets are built with space reserved for variables needed by ROM services
 # this space is initialized with a rom call to rom_data_init
 TARGETS_WITH_ROM_VARS := nvm-read nvm-write romimg flasher \
-                         rftest-rx rftest-tx econo-test\
+                         rftest-rx rftest-tx sleep2 econo-test\
 			autoack-rx autoack-tx \
 			per
 
